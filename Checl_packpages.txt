@@ -1,0 +1,106 @@
+**1. Define the IP Range**
+
+First, you need to specify the IP range of your Windows servers. You can do this using a Ruby range or an array:
+
+```ruby
+ip_range = '192.168.1.100'..'192.168.1.110'  # Using a range
+# or
+ip_range = ['192.168.1.100', '192.168.1.101', '192.168.1.102']  # Using an array
+```
+
+**2. Retrieve Installed Packages**
+
+Next, you'll need to gather the list of installed packages on each server. We'll use the `powershell_out` helper in Chef to execute PowerShell commands remotely and retrieve the package information:
+
+```ruby
+installed_packages = {}
+
+ip_range.each do |ip_address|
+  powershell_script = <<-EOH
+    Get-Package | Select-Object Name, Version | Format-Table -HideTableHeaders
+  EOH
+
+  package_info = powershell_out("Invoke-Command -ComputerName #{ip_address} -ScriptBlock {#{powershell_script}}")
+  installed_packages[ip_address] = package_info.stdout.split("\n")
+end
+```
+
+**3. Compare Packages**
+
+Now that you have the installed packages for each server, you can compare them to identify any discrepancies:
+
+```ruby
+base_packages = installed_packages[ip_range.first]
+
+mismatched_servers = {}
+
+installed_packages.each do |ip_address, packages|
+  unless packages == base_packages
+    mismatched_servers[ip_address] = packages
+  end
+end
+```
+
+**4. Report Results**
+
+Finally, you can report the results, either by logging them or raising an error if any mismatches are found:
+
+```ruby
+if mismatched_servers.empty?
+  Chef::Log.info('All servers have the same packages installed.')
+else
+  mismatched_servers.each do |ip_address, packages|
+    Chef::Log.warn("Server #{ip_address} has mismatched packages: #{packages}")
+  end
+  raise 'Package mismatch found!'
+end
+```
+
+**Complete Chef Recipe**
+
+```ruby
+# Define the IP range of your Windows servers
+ip_range = '192.168.1.100'..'192.168.1.110'
+
+# Retrieve installed packages from each server
+installed_packages = {}
+
+ip_range.each do |ip_address|
+  powershell_script = <<-EOH
+    Get-Package | Select-Object Name, Version | Format-Table -HideTableHeaders
+  EOH
+
+  package_info = powershell_out("Invoke-Command -ComputerName #{ip_address} -ScriptBlock {#{powershell_script}}")
+  installed_packages[ip_address] = package_info.stdout.split("\n")
+end
+
+# Compare packages and identify mismatches
+base_packages = installed_packages[ip_range.first]
+
+mismatched_servers = {}
+
+installed_packages.each do |ip_address, packages|
+  unless packages == base_packages
+    mismatched_servers[ip_address] = packages
+  end
+end
+
+# Report results
+if mismatched_servers.empty?
+  Chef::Log.info('All servers have the same packages installed.')
+else
+  mismatched_servers.each do |ip_address, packages|
+    Chef::Log.warn("Server #{ip_address} has mismatched packages: #{packages}")
+  end
+  raise 'Package mismatch found!'
+end
+```
+
+**Additional Considerations**
+
+* **Error Handling:** You might want to add more robust error handling to catch potential issues like network connectivity problems or PowerShell execution failures.
+* **Package Filtering:** You could filter the packages being compared based on specific criteria, such as package name, version, or vendor.
+* **Reporting:** You could customize the reporting to provide more detailed information about the mismatched packages or generate a report file.
+* **Chef Client:** Ensure that the Chef client is installed and configured on all the Windows servers in the IP range.
+
+This recipe provides a basic framework for checking package consistency across your Windows servers. You can adapt and enhance it further based on your specific requirements and environment.
